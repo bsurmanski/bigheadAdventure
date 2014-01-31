@@ -38,10 +38,9 @@ int main(int argc, char *argv[])
     }
 
 
-    main_screen = SDL_SetVideoMode(SCREENX * 1, SCREENY * 1, 32, SDL_DOUBLEBUF | SDL_SWSURFACE);
-    scaled = 0;
+    scaled = SDL_SetVideoMode(SCREENX * 2, SCREENY * 2, 32, SDL_DOUBLEBUF | SDL_SWSURFACE);
 
-    /*main_screen = SDL_CreateRGBSurface(SDL_SWSURFACE,
+    main_screen = SDL_CreateRGBSurface(SDL_SWSURFACE,
             SCREENX,
             SCREENY,
             scaled->format->BitsPerPixel,
@@ -49,7 +48,7 @@ int main(int argc, char *argv[])
             scaled->format->Gmask,
             scaled->format->Bmask,
             scaled->format->Amask
-            );*/
+            );
 
 
     if (!main_screen){

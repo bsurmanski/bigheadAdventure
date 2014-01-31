@@ -16,6 +16,7 @@
 #include "menu.h"
 
 extern SDL_Surface *main_screen;
+extern SDL_Surface *scaled;
 extern int game_state;
 extern uint8_t *key_state;
 extern int RUNNING;
@@ -35,6 +36,7 @@ static void draw_main_menu(void);
 static void update_main_menu(void);
 static void draw_level_select(void);
 static void update_level_select(void);
+void upscaleCopy(SDL_Surface* dst, SDL_Surface *src, int scale);
 
 
 void run_menu(void)
@@ -56,6 +58,9 @@ void run_menu(void)
             draw_level_select();
         }
         SDL_UpdateRect(main_screen,0,0,main_screen->w, main_screen->h);
+        //SDL_BlitSurface(main_screen, 0, scaled, 0);
+        upscaleCopy(scaled, main_screen, 2);
+        SDL_Flip(scaled);
         ms_passed = SDL_GetTicks() - ms_passed;
         SDL_Delay(16 - ms_passed);
     } 

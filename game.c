@@ -54,6 +54,7 @@ int map_draw_offsety = 0;
 
 void upscaleCopy(SDL_Surface *dest, SDL_Surface *src, int scale)
 {
+    flicker = 1;
     int i, j, k;
     for(j = 0; j < src->h; j++){
         for(i = 0; i < src->w; i++){
@@ -280,6 +281,7 @@ static void draw_player_data()
 static void draw_game()
 {
     //clear screen
+    SDL_FillRect(scaled, 0, 0);
     SDL_Rect fill_rect = {0, 0, main_screen->w, main_screen->h};
     //SDL_FillRect(scaled, NULL, 0x0000000);
 
@@ -293,7 +295,6 @@ static void draw_game()
     draw_player();
     draw_player_data();
 
-    //upscaleCopy(scaled, main_screen, 2);
     //SDL_BlitSurface(main_screen, &fill_rect, scaled, &fill_rect);
     ticks++;
 }
@@ -409,7 +410,9 @@ void run_game()
         draw_game();
         //SDL_Flip(main_screen);
         //SDL_UpdateRect(scaled,0,0,scaled->w,scaled->h);
-        SDL_Flip(main_screen);
+        //SDL_BlitSurface(main_screen, 0, scaled, 0);
+        upscaleCopy(scaled, main_screen, 2);
+        SDL_Flip(scaled);
         ms_passed = SDL_GetTicks() - ms_passed;
         if(ms_passed < 16){
             SDL_Delay(16 - ms_passed);
