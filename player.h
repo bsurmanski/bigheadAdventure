@@ -18,7 +18,7 @@ void respawn_player(int x, int y);
 void draw_player();
 int get_player_score();
 void update_player();
-void handle_player_key_event(SDLKey key);
+void handle_player_key_event(SDL_Scancode key);
 
 struct player_data *get_player_data();
 

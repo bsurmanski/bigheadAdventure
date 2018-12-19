@@ -12,21 +12,22 @@
 #include <sys/types.h>
 #include <dirent.h>
 
-#include <SDL/SDL.h>
-#include <SDL/SDL_image.h>
+#include <SDL2/SDL.h>
+#include <SDL2_image/SDL_image.h>
 
 #include "list.h"
 #include "game.h"
 #include "font.h"
 #include "map.h"
+#include "menu.h"
 #include "player.h"
 
 extern const int RUNNING;
 extern const int QUIT;
 
 
-extern SDL_Surface *main_screen;
-extern SDL_Surface *scaled;
+extern SDL_Renderer *renderer;
+extern SDL_Texture *main_screen;
 extern int game_state;
 extern uint8_t *key_state;
 
@@ -35,16 +36,15 @@ bool win = false;
 
 //MAP
 static SDL_Surface *map = 0;
-SDL_Surface *overlay = 0;
-SDL_Surface *map_buffer = 0;
+SDL_Texture *map_buffer = 0;
 
-static SDL_Surface *blk_brick;
-static SDL_Surface *blk_grass;
-static SDL_Surface *blk_coin;
-static SDL_Surface *blk_spike;
-static SDL_Surface *blk_water;
-static SDL_Surface *blk_obsid;
-static SDL_Surface *blk_cake;
+static SDL_Texture *blk_brick;
+static SDL_Texture *blk_grass;
+static SDL_Texture *blk_coin;
+static SDL_Texture *blk_spike;
+static SDL_Texture *blk_water;
+static SDL_Texture *blk_obsid;
+static SDL_Texture *blk_cake;
 
 extern SDL_Surface *font;
 static int flicker = 0;
@@ -52,8 +52,13 @@ static int flicker = 0;
 int map_draw_offsetx = 0;
 int map_draw_offsety = 0;
 
-void upscaleCopy(SDL_Surface *dest, SDL_Surface *src, int scale)
+void upscaleCopy(SDL_Texture *src, SDL_Texture *dst, int scale)
 {
+    SDL_SetRenderTarget(renderer, dst);
+    SDL_RenderCopy(renderer, src, NULL, NULL);
+    SDL_SetRenderTarget(renderer, NULL);
+
+    /*
     flicker = 1;
     int i, j, k;
     for(j = 0; j < src->h; j++){
@@ -64,41 +69,50 @@ void upscaleCopy(SDL_Surface *dest, SDL_Surface *src, int scale)
                       src->format->BytesPerPixel);
             }
         }
-        /*for(k = 1; k < scale; k++){
+        for(k = 1; k < scale; k++){
         memcpy(dest->pixels + scale * (j * dest->pitch),
                 dest->pixels + scale * ((j+k) * dest->pitch),
                 dest->pitch
                 );
-        }*/
+        }
     }
+    */
 }
 
 
-static int get_background_color(){
-    return SDL_MapRGB(map_buffer->format, 200, 200, 255);
+static SDL_Color get_background_color(){
+    SDL_Color r = {200, 200, 255, 255};
+    return r;
+}
+
+int getRGBA(int pxl, const SDL_PixelFormat* format) {
+    uint8_t r,g,b,a;
+    SDL_GetRGBA(pxl, format, &r, &g, &b, &a);
+    return (((int) r) << 24) |
+           (((int) g) << 16) |
+           (((int) b) << 8) | a;
 }
 
 static void init_map_buffer()
 {
     if(map_buffer){
-        SDL_FreeSurface(map_buffer);
+        SDL_DestroyTexture(map_buffer);
     }
 
-    map_buffer = SDL_CreateRGBSurface(SDL_SWSURFACE,
-                map->w * 16,
-                map->h * 16,
-                main_screen->format->BitsPerPixel,
-                main_screen->format->Rmask,
-                main_screen->format->Gmask,
-                main_screen->format->Bmask,
-                main_screen->format->Amask);
+    map_buffer = SDL_CreateTexture(renderer,
+                                   SDL_PIXELFORMAT_RGBA8888,
+                                   SDL_TEXTUREACCESS_TARGET,
+                                   map->w * 16,
+                                   map->h * 16);
+    SDL_SetRenderTarget(renderer, map_buffer);
 
-    SDL_Rect map_size = {0,0, map_buffer->w, map_buffer->h};
-    SDL_FillRect(map_buffer,
-                &map_size,
-                get_background_color());
+    // clear map
+    SDL_Color bgc = get_background_color();
+    SDL_SetRenderDrawColor(renderer, bgc.r, bgc.g, bgc.b, bgc.a);
+    SDL_RenderClear(renderer);
+
+
     SDL_Rect dest = {0,0,16,16};
-
     int pxl;
     int bpp = map->format->BytesPerPixel;
     int i, j;
@@ -107,33 +121,42 @@ static void init_map_buffer()
             dest.x = j * 16;
             dest.y = i * 16;
             memcpy(&pxl,  map->pixels + i * map->pitch + j * bpp, bpp);
+            int rgba = getRGBA(pxl, map->format);
 
-            switch (pxl){
+            switch (rgba){
                 case BLK_BRCK:
-                    SDL_BlitSurface(blk_brick, NULL, map_buffer, &dest);
+                    SDL_RenderCopy(renderer, blk_brick, NULL, &dest);
                     break;
                 case BLK_GRSS:
-                    SDL_BlitSurface(blk_grass, NULL, map_buffer, &dest);
+                    SDL_RenderCopy(renderer, blk_grass, NULL, &dest);
                     break;
                 case BLK_COIN:
-                    SDL_BlitSurface(blk_coin, NULL, map_buffer, &dest);
+                    SDL_RenderCopy(renderer, blk_coin, NULL, &dest);
                     break;
                 case BLK_SPKE:
-                    SDL_BlitSurface(blk_spike, NULL, map_buffer, &dest);
+                    SDL_RenderCopy(renderer, blk_spike, NULL, &dest);
                     break;
                 case BLK_WATR:
-                    SDL_BlitSurface(blk_water, NULL, map_buffer, &dest);
+                    SDL_RenderCopy(renderer, blk_water, NULL, &dest);
                     break;
                 case BLK_OBSD:
-                    SDL_BlitSurface(blk_obsid, NULL, map_buffer, &dest);
+                    SDL_RenderCopy(renderer, blk_obsid, NULL, &dest);
                     break;
                 case BLK_CAKE:
-                    SDL_BlitSurface(blk_cake, NULL, map_buffer, &dest);
+                    SDL_RenderCopy(renderer, blk_cake, NULL, &dest);
                 default:
                     break;
             }
         }
     }
+
+    SDL_SetRenderTarget(renderer, NULL);
+}
+
+int strcompare(const void* a, const void *b) {
+    const char **ia = (const char **)a;
+    const char **ib = (const char **)b;
+    return strcmp(*ia, *ib);
 }
 
 char **list_game_levels(int *num_levels)
@@ -171,6 +194,10 @@ static char **levels = 0;
     }
     closedir(dp);
     *num_levels = levels_size;
+
+
+    qsort(levels, levels_size, sizeof(char*), strcompare);
+
     return levels;
 }
 
@@ -190,25 +217,8 @@ static void load_game_level(char *level){
 
     init_map_buffer();
 
-    if (overlay){
-        SDL_FreeSurface(overlay);
-    }
-    overlay = SDL_CreateRGBSurface(SDL_SRCALPHA,
-                map->w * 16,
-                map->h * 16,
-                main_screen->format->BitsPerPixel,
-                main_screen->format->Rmask,
-                main_screen->format->Gmask,
-                main_screen->format->Bmask,
-                main_screen->format->Amask);
-
-    SDL_Rect fill_rect = {0, 0, overlay->w, overlay->h};
-    SDL_FillRect(overlay,
-                &fill_rect,
-                SDL_MapRGBA(overlay->format, 0,0,0,0));
-
     int x, y;
-    find_map_block(0xFF000000 ,&x, &y);
+    find_map_block(BLK_SPWN, &x, &y);
     respawn_player(x * 16, y * 16);
     win = false;
 }
@@ -219,50 +229,50 @@ static void load_game_level(char *level){
  */
 void load_game_resources()
 {
-    blk_brick = IMG_Load("res/brick.png");
-    blk_grass = IMG_Load("res/grass.png");
-    blk_coin = IMG_Load("res/coin.png");
-    blk_spike = IMG_Load("res/spikes.png");
-    blk_water = IMG_Load("res/water.png");
-    blk_obsid = IMG_Load("res/obsidian.png");
-    blk_cake = IMG_Load("res/cake.png");
+    blk_brick = IMG_LoadTexture(renderer, "res/brick.png");
+    blk_grass = IMG_LoadTexture(renderer, "res/grass.png");
+    blk_coin = IMG_LoadTexture(renderer, "res/coin.png");
+    blk_spike = IMG_LoadTexture(renderer, "res/spikes.png");
+    blk_water = IMG_LoadTexture(renderer, "res/water.png");
+    blk_obsid = IMG_LoadTexture(renderer, "res/obsidian.png");
+    blk_cake = IMG_LoadTexture(renderer, "res/cake.png");
 
     load_player_resources();
 }
 
-SDL_Surface *get_horizontal_flipped(SDL_Surface *surface)
+SDL_Texture *get_horizontal_flipped(SDL_Texture *src)
 {
-    SDL_Surface *flipped = SDL_CreateRGBSurface(SDL_SWSURFACE,
-            surface->w,
-            surface->h,
-            surface->format->BitsPerPixel,
-            surface->format->Rmask,
-            surface->format->Gmask,
-            surface->format->Bmask,
-            surface->format->Amask
-            );
+    int w, h;
+    SDL_QueryTexture(src, NULL, NULL, &w, &h);
+    SDL_Texture *flipped = SDL_CreateTexture(renderer,
+                                             SDL_PIXELFORMAT_RGBA8888,
+                                             SDL_TEXTUREACCESS_TARGET,
+                                             w, h);
+    SDL_SetRenderTarget(renderer, flipped);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureBlendMode(flipped, SDL_BLENDMODE_BLEND);
 
-    int bpp = surface->format->BytesPerPixel;
-    int i, j;
-    for(i = 0; i < surface->h; i++){
-        for(j = 0; j < surface->w; j++){
-            memcpy(flipped->pixels + ((i * bpp) + (j * surface->pitch)),
-                    surface->pixels + (surface->w -1  - i) * bpp + j * surface->pitch,
-                    bpp);
-        }
-    }
+    // clear target texture
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 0);
+    SDL_RenderClear(renderer);
+
+    SDL_RenderCopyEx(renderer, src, NULL, NULL, 0, NULL, SDL_FLIP_HORIZONTAL);
+    SDL_SetRenderTarget(renderer, NULL);
+
     return flipped;
 }
 
 /**
  * determine if the point x,y falls outside the buffer space
  */
-int outside_buffer(SDL_Surface *surface, int x, int y)
+int outside_buffer(SDL_Texture *t, int x, int y)
 {
+    int w, h;
+    SDL_QueryTexture(t, NULL, NULL, &w, &h);
     return (    x < 0
             ||  y < 0
-            ||  x >= surface->w
-            ||  y >= surface->h
+            ||  x >= w
+            ||  y >= h
             );
 }
 
@@ -272,30 +282,37 @@ static void draw_player_data()
     char buffer[20];
     int score = get_player_score();
     sprintf(buffer, "SCORE:%d", score);
-    draw_text(main_screen, buffer, 5, 5);
+    SDL_SetRenderTarget(renderer, main_screen);
+    draw_text(buffer, 5, 5);
+    SDL_SetRenderTarget(renderer, NULL);
 }
 
+#define min(x,y) (x<y?x:y)
 /**
  * draws the game to the screen, and calls all other relevant draw functions
  */
 static void draw_game()
 {
+    int msw, msh;
+    SDL_QueryTexture(main_screen, NULL, NULL, &msw, &msh);
+    int mbw, mbh;
+    SDL_QueryTexture(map_buffer, NULL, NULL, &mbw, &mbh);
+
     //clear screen
-    SDL_FillRect(scaled, 0, 0);
-    SDL_Rect fill_rect = {0, 0, main_screen->w, main_screen->h};
-    //SDL_FillRect(scaled, NULL, 0x0000000);
+    SDL_SetRenderTarget(renderer, main_screen);
+    SDL_RenderDrawRect(renderer, NULL);
 
     SDL_Rect overlay_rect = {map_draw_offsetx,
                             -map_draw_offsety,
-                            main_screen->w,
-                            main_screen->h};
+                            min(msw, mbw),
+                            min(msh, mbh)};
 
-    SDL_FillRect(main_screen, &fill_rect, SDL_MapRGB(main_screen->format, 255,255,255));
-    SDL_BlitSurface(map_buffer, &overlay_rect, main_screen, &fill_rect);
+    SDL_Rect fill_rect = {0, 0, min(msw, mbw), min(msh, mbh)};
+    SDL_RenderCopy(renderer, map_buffer, &overlay_rect, &fill_rect);
     draw_player();
     draw_player_data();
 
-    //SDL_BlitSurface(main_screen, &fill_rect, scaled, &fill_rect);
+    SDL_RenderCopy(renderer, main_screen, NULL, NULL);
     ticks++;
 }
 
@@ -311,7 +328,7 @@ int get_map_block(int x, int y)
     if(blky < 0 || blkx < 0 || blkx >= map->w || blky > map->h)
         return BLK_OBSD;
     int *pxl = (map->pixels + blky * map->pitch + blkx * map->pitch / map->w);
-    return *pxl;
+    return getRGBA(*pxl, map->format);
 }
 
 /**
@@ -324,21 +341,30 @@ void remove_map_block(int x, int y)
     int blky = y/16;
     if(blky < 0 || blkx < 0)
         return;
-    int pxl = 0xFFFFFFFF; // sky;
+    int pxl = BLK_BKGR; // sky;
     memcpy(map->pixels + blky * map->pitch + blkx * map->pitch / map->w, &pxl, 4);
 
     SDL_Rect fill_rect = {blkx * 16, blky * 16, 16, 16};
-    SDL_FillRect(map_buffer, &fill_rect, get_background_color());
+    SDL_Color bgc = get_background_color();
+    SDL_SetRenderDrawColor(renderer, bgc.r, bgc.g, bgc.b, bgc.a);
+    SDL_SetRenderTarget(renderer, map_buffer);
+    SDL_RenderFillRect(renderer, &fill_rect);
+    SDL_SetRenderTarget(renderer, NULL);
 }
 
 void find_map_block(int pxl, int *x, int *y)
 {
+    int rgba = SDL_MapRGBA(map->format,
+                           (pxl & 0xFF000000) >> 24,
+                           (pxl & 0x00FF0000) >> 16,
+                           (pxl & 0x0000FF00) >> 8,
+                           (pxl & 0x000000FF));
     int i, j;
     int bpp = map->pitch / map->w;
     for(i = 0; i < map->h; i++)
-        for(j = 0; j < map->w; j++){
+        for(j = 0; j < map->w; j++) {
             if(!memcmp(map->pixels + i * map->pitch + j * bpp,
-                        &pxl, bpp)){
+                        &rgba, bpp)){
                 *x = j;
                 *y = i;
                 return;
@@ -354,7 +380,6 @@ static void update_game()
         time = SDL_GetTicks();
     }
 
-
     SDL_Event event;
     while (SDL_PollEvent(&event)){
         switch (event.type){
@@ -369,28 +394,28 @@ static void update_game()
     }
 
     SDL_PumpEvents();
-    if (key_state[SDLK_SPACE]){
+    if (key_state[SDL_SCANCODE_SPACE]){
         int x, y;
-        find_map_block(0xFF000000, &x, &y);
+        find_map_block(BLK_SPWN, &x, &y);
         respawn_player(x * 16, y * 16);
     }
-    if (key_state[SDLK_RETURN]){
+    if (key_state[SDL_SCANCODE_RETURN]){
         //game_state = QUIT;
     }
-    if (key_state[SDLK_LEFT]){
-        handle_player_key_event(SDLK_LEFT);
+    if (key_state[SDL_SCANCODE_LEFT]){
+        handle_player_key_event(SDL_SCANCODE_LEFT);
     }
-    if (key_state[SDLK_RIGHT]){
-        handle_player_key_event(SDLK_RIGHT);
+    if (key_state[SDL_SCANCODE_RIGHT]){
+        handle_player_key_event(SDL_SCANCODE_RIGHT);
     }
-    if(key_state[SDLK_UP]){
-        handle_player_key_event(SDLK_UP);
+    if(key_state[SDL_SCANCODE_UP]){
+        handle_player_key_event(SDL_SCANCODE_UP);
     }
-    if(key_state[SDLK_DOWN]){
-        handle_player_key_event(SDLK_DOWN);
+    if(key_state[SDL_SCANCODE_DOWN]){
+        handle_player_key_event(SDL_SCANCODE_DOWN);
     }
-    if (key_state[SDLK_a]){
-        handle_player_key_event(SDLK_a);
+    if (key_state[SDL_SCANCODE_A]){
+        handle_player_key_event(SDL_SCANCODE_A);
     }
 
     update_player();
@@ -408,14 +433,10 @@ void run_game()
         ms_passed = SDL_GetTicks();
         update_game();
         draw_game();
-        //SDL_Flip(main_screen);
-        //SDL_UpdateRect(scaled,0,0,scaled->w,scaled->h);
-        //SDL_BlitSurface(main_screen, 0, scaled, 0);
-        upscaleCopy(scaled, main_screen, 2);
-        SDL_Flip(scaled);
+
+        SDL_SetRenderTarget(renderer, NULL);
+        SDL_RenderPresent(renderer);
         ms_passed = SDL_GetTicks() - ms_passed;
-        if(ms_passed < 16){
-            SDL_Delay(16 - ms_passed);
-        }
+        if(ms_passed < 16) SDL_Delay(16 - ms_passed);
     }
 }

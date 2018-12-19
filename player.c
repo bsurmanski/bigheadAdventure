@@ -8,17 +8,17 @@
 #include <math.h>
 #include <stdbool.h>
 
-#include <SDL/SDL.h>
-#include <SDL/SDL_image.h>
-#include <SDL/SDL_mixer.h>
+#include <SDL2/SDL.h>
+#include <SDL2_image/SDL_image.h>
+#include <SDL2_mixer/SDL_mixer.h>
 
 #include "player.h"
 #include "map.h"
 #include "game.h"
 #include "list.h"
 
-extern SDL_Surface *main_screen; // FROM MAIN.C
-extern SDL_Surface *map_buffer; // FROM GAME.C
+extern SDL_Texture *main_screen; // FROM MAIN.C
+extern SDL_Texture *map_buffer; // FROM GAME.C
 
 
 /*
@@ -49,7 +49,7 @@ typedef struct {
     uint8_t facing_dir;
     uint8_t near_blocks; //bitmask of surrounding blocks
     uint8_t action_timeout;
-    SDL_Surface *sprite;
+    SDL_Texture *sprite;
 } Player;
 
 typedef struct Particle{
@@ -57,37 +57,38 @@ typedef struct Particle{
     float y;
     float vx;
     float vy;
-    uint32_t color;
+    SDL_Color color;
     uint32_t timeout;
     bool (*update)(struct Particle *p);
-    void (*draw)(struct Particle *p);
+    void (*draw)(struct Particle *p, int offsetx, int offsety);
 } Particle;
 bool particle_update_chunky(Particle *p);
 bool particle_update_normal(Particle *p);
-void particle_draw_chunky(Particle *p);
-void particle_draw_normal(Particle *p);
+void particle_draw_chunky(Particle *p, int offsetx, int offsety);
+void particle_draw_normal(Particle *p, int offsetx, int offsety);
 
 List *particles;
 
+extern SDL_Renderer *renderer;
 static Player current_player;
 /**
  * Player resources
  */
-static SDL_Surface *frame0;
-static SDL_Surface *frame1;
-static SDL_Surface *frame2;
-static SDL_Surface *raml;
-static SDL_Surface *ramr;
-static SDL_Surface *jumpl;
-static SDL_Surface *jumpr;
-static SDL_Surface *falll;
-static SDL_Surface *fallr;
-static SDL_Surface *run1l;
-static SDL_Surface *run2l;
-static SDL_Surface *run1r;
-static SDL_Surface *run2r;
-static SDL_Surface *dead;
-static SDL_Surface *plummet;
+static SDL_Texture *frame0;
+static SDL_Texture *frame1;
+static SDL_Texture *frame2;
+static SDL_Texture *raml;
+static SDL_Texture *ramr;
+static SDL_Texture *jumpl;
+static SDL_Texture *jumpr;
+static SDL_Texture *falll;
+static SDL_Texture *fallr;
+static SDL_Texture *run1l;
+static SDL_Texture *run2l;
+static SDL_Texture *run1r;
+static SDL_Texture *run2r;
+static SDL_Texture *dead;
+static SDL_Texture *plummet;
 
 static Mix_Chunk *mix_jump;
 static Mix_Chunk *mix_step1;
@@ -117,20 +118,20 @@ void load_player_resources()
     //bit map of near block transparency eg. lsb = block bellow, lsb+1 = block right ...
     current_player.near_blocks = 0;
 
-    frame0 = IMG_Load("res/bighead.png");
-    frame1 = IMG_Load("res/bigheadl.png");
+    frame0 = IMG_LoadTexture(renderer, "res/bighead.png");
+    frame1 = IMG_LoadTexture(renderer, "res/bigheadl.png");
     frame2 = get_horizontal_flipped(frame1);
-    raml = IMG_Load("res/bighead-raml.png");
+    raml = IMG_LoadTexture(renderer, "res/bighead-raml.png");
     ramr = get_horizontal_flipped(raml);
-    dead = IMG_Load("res/bighead-dead.png");
-    run1l = IMG_Load("res/bighead-run1l.png");
-    run2l = IMG_Load("res/bighead-run2l.png");
+    dead = IMG_LoadTexture(renderer, "res/bighead-dead.png");
+    run1l = IMG_LoadTexture(renderer, "res/bighead-run1l.png");
+    run2l = IMG_LoadTexture(renderer, "res/bighead-run2l.png");
     run1r = get_horizontal_flipped(run1l);
     run2r = get_horizontal_flipped(run2l);
-    plummet = IMG_Load("res/bighead-plummet.png");
-    jumpl = IMG_Load("res/bighead-jump.png");
+    plummet = IMG_LoadTexture(renderer, "res/bighead-plummet.png");
+    jumpl = IMG_LoadTexture(renderer, "res/bighead-jump.png");
     jumpr = get_horizontal_flipped(jumpl);
-    falll = IMG_Load("res/bighead-fall.png");
+    falll = IMG_LoadTexture(renderer, "res/bighead-fall.png");
     fallr = get_horizontal_flipped(falll);
 
     current_player.sprite = frame0;
@@ -177,7 +178,7 @@ static void draw_particles()
 
     while(current_node){
         p = (Particle*) node_value(current_node);
-        p->draw(p);
+        p->draw(p, -map_draw_offsetx, map_draw_offsety);
         current_node = node_next(current_node);
     }
 }
@@ -185,44 +186,31 @@ static void draw_particles()
 /**
  * particle draw functions
  */
-void particle_draw_normal(Particle *p)
+void particle_draw_normal(Particle *p, int offsetx, int offsety)
 {
-    if(!outside_buffer(main_screen, (p->x - map_draw_offsetx),
-                p->y + map_draw_offsety)){
-            memcpy(main_screen->pixels + ((int)p->x - map_draw_offsetx) 
-                    * main_screen->format->BytesPerPixel 
-                    + ((int) p->y + map_draw_offsety) * main_screen->pitch,
-                            &(p->color),
-                             main_screen->format->BytesPerPixel);
-    }
+    SDL_SetRenderDrawColor(renderer,
+                           p->color.r,
+                           p->color.g,
+                           p->color.b,
+                           p->color.a);
+    SDL_RenderDrawPoint(renderer,
+                        p->x + offsetx,
+                        p->y + offsety);
 }
 
-void particle_draw_chunky(Particle *p){
-    if (!outside_buffer(main_screen, (p->x - map_draw_offsetx),
-                (p->y + map_draw_offsety)) && 
-            (!outside_buffer(main_screen, (p->x - map_draw_offsetx + 1),
-            (p->y + map_draw_offsety + 1)))){
-        memcpy(main_screen->pixels + ((int)p->x - map_draw_offsetx) *
-                main_screen->format->BytesPerPixel +
-                ((int) p->y + map_draw_offsety) * main_screen->pitch,
-                &(p->color),
-                main_screen->format->BytesPerPixel);
-        memcpy(main_screen->pixels + ((int)p->x - map_draw_offsetx) *
-                main_screen->format->BytesPerPixel +
-                ((int) p->y + map_draw_offsety + 1) * main_screen->pitch,
-                &(p->color),
-                main_screen->format->BytesPerPixel);
-        memcpy(main_screen->pixels + ((int)p->x - map_draw_offsetx + 1) *
-                main_screen->format->BytesPerPixel +
-                ((int) p->y + map_draw_offsety + 1) * main_screen->pitch,
-                &(p->color),
-                main_screen->format->BytesPerPixel);
-        memcpy(main_screen->pixels + ((int)p->x - map_draw_offsetx + 1) *
-                main_screen->format->BytesPerPixel +
-                ((int) p->y + map_draw_offsety) * main_screen->pitch,
-                &(p->color),
-                main_screen->format->BytesPerPixel);
+void particle_draw_chunky(Particle *p, int offsetx, int offsety){
+    SDL_Point points[5] = {{0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    for(int i = 0; i < 5; i++) {
+        points[i].x += p->x + offsetx;
+        points[i].y += p->y + offsety;
     }
+    SDL_SetRenderDrawColor(renderer,
+                           p->color.r,
+                           p->color.g,
+                           p->color.b,
+                           p->color.a);
+    SDL_RenderDrawPoints(renderer,
+                         points, 5);
 }
 
 /**
@@ -230,12 +218,14 @@ void particle_draw_chunky(Particle *p){
  */
 void draw_player()
 {
+    int w, h;
+    SDL_QueryTexture(current_player.sprite, NULL, NULL, &w, &h);
     SDL_Rect dest = {(int)current_player.x - map_draw_offsetx,
                     (int)current_player.y + map_draw_offsety,
-                    current_player.sprite->w,
-                    current_player.sprite->h};
+                    w,
+                    h};
 
-    SDL_BlitSurface(current_player.sprite, NULL, main_screen, &dest);
+    SDL_RenderCopy(renderer, current_player.sprite, NULL, &dest);
     draw_particles();
 }
 
@@ -336,7 +326,7 @@ static uint8_t attempt_to_break_block(int x, int y)
             p->y = y;
             p->vx = rand() % 5 - 2.5;
             p->vy = rand() % 5 - 2.5;
-            p->color = SDL_MapRGB(main_screen->format, 0, 0, 0);
+            p->color = (SDL_Color){0, 0, 0, 255};
             p->draw = particle_draw_chunky;
             p->update = particle_update_normal;
             p->timeout = rand() % 100;
@@ -368,8 +358,6 @@ static void update_particles()
 }
 
 int blk;
-uint8_t R,G,B;
-int color;
 bool particle_update_normal(Particle *p)
 {
     p->x += p->vx;
@@ -378,17 +366,14 @@ bool particle_update_normal(Particle *p)
     if (block_is_solid(blk)){
 
         //ADD TO DEATH BUFFER
-        SDL_GetRGB(p->color, main_screen->format, &R, &G, &B);
-        color = SDL_MapRGB(map_buffer->format, R, G, B);
-        int bpp = map_buffer->format->BytesPerPixel;
-        memcpy(map_buffer->pixels + ((int)p->x) * bpp + ((int) p->y) * map_buffer->pitch,
-                        &(color),
-                         bpp);
+        SDL_SetRenderTarget(renderer, map_buffer);
+        particle_draw_normal(p, 0, 0);
+        SDL_SetRenderTarget(renderer, NULL);
         return true;
     } else {
         p->vy += 0.1;
         if(outside_buffer(map_buffer, p->x, p->y)){
-          return true; 
+          return true;
         }
     }
     return false;
@@ -426,8 +411,8 @@ static void update_near_blocks()
 {
     current_player.near_blocks = 0;
 
-    int w = current_player.sprite->w;
-    int h = current_player.sprite->h;
+    int w, h;
+    SDL_QueryTexture(current_player.sprite, NULL, NULL, &w, &h);
     int nextx = current_player.x + current_player.vx;
     int nexty = current_player.y + current_player.vy;
 
@@ -464,8 +449,8 @@ static void update_near_blocks()
     if (blk == BLK_WATR){
         if (!(current_player.state & (1 << 1))){ // in water and not wet
             Mix_PlayChannel(-1, mix_splash, 0);
-            int x = current_player.x + current_player.sprite->w / 2;
-            int y = current_player.y + current_player.sprite->h;
+            int x = current_player.x + w / 2;
+            int y = current_player.y + h;
             int i;
             for (i = 0; i < 100; i++){
                     Particle *p = malloc(sizeof(Particle));
@@ -475,7 +460,7 @@ static void update_near_blocks()
                     p->vy = -((rand() % 100)/40.0);
                     p->draw = particle_draw_normal;
                     p->update = particle_update_normal;
-                    p->color = SDL_MapRGB(main_screen->format, 0, 0, 255);
+                    p->color = (SDL_Color){0, 0, 255, 255};
                 list_append(particles, p);
                 free(p);
             }
@@ -491,7 +476,7 @@ static void update_near_blocks()
             Mix_PlayChannel(-1, mix_coin, 0);
             if (current_player.state & (1<<7)){
                 current_player.score+= 500;
-            } else{ 
+            } else{
                 current_player.score+= 100;
             }
         }
@@ -501,8 +486,8 @@ static void update_near_blocks()
              Mix_PlayChannel(-1, mix_ouch, 0);
              Mix_PlayChannel(-1, mix_spikes, 0);
 
-            int x = current_player.x + current_player.sprite->w / 2;
-            int y = current_player.y + current_player.sprite->h;
+            int x = current_player.x + w / 2;
+            int y = current_player.y + h;
             int i;
             for (i = 0; i < 1000; i++){
                 Particle *p = malloc(sizeof(Particle));
@@ -510,7 +495,7 @@ static void update_near_blocks()
                 p->y = y;
                 p->vx = ((rand() % 100)/20.0) - 2.5;
                 p->vy = -((rand() % 100)/20.0);
-                p->color = SDL_MapRGB(main_screen->format, 255, 0, 0);
+                p->color = (SDL_Color){255, 0, 0, 255};
                 p->draw = particle_draw_normal;
                 p->update = particle_update_normal;
                 list_append(particles, p);
@@ -527,9 +512,9 @@ static void update_sprites(){
         if (current_player.state & (1 << 7)){ //PLUMMETING
             current_player.sprite = plummet;
           } else if (current_player.vy < 0){ // JUMPING
-           current_player.sprite = current_player.facing_dir ? 
-                    jumpr : 
-                    jumpl; 
+           current_player.sprite = current_player.facing_dir ?
+                    jumpr :
+                    jumpl;
         /*} else if (current_player.vy > 0) { //FALLING
             current_player.sprite = current_player.facing_dir?
                     fallr :
@@ -577,7 +562,7 @@ void update_player()
     update_particles();
     update_sprites();
 
-    if (current_player.vx >= current_player.max_speed || 
+    if (current_player.vx >= current_player.max_speed ||
                         current_player.vx <= -current_player.max_speed){
         current_player.state |= (1<<6);
     } else {
@@ -587,13 +572,13 @@ void update_player()
     if (current_player.near_blocks & ((1 << 0))){ //SOLID BLOCK BELLOW
         if (current_player.state & (1<<7)){ // if plummeting
             if (current_player.vy >= current_player.max_speed){
-                int w = current_player.sprite->w;
-                int h = current_player.sprite->h;
+                int w, h;
+                SDL_QueryTexture(current_player.sprite, NULL, NULL, &w, &h);
                 int x = current_player.x + w/2;
                 int y = current_player.y + 3*h/2;
                 attempt_to_break_block(x,y);
             }
-            current_player.action_timeout--; 
+            current_player.action_timeout--;
             current_player.vx *=0.8;
             if (!current_player.action_timeout){
                 current_player.state &= ~(1<<7); //stop plummeting
@@ -639,14 +624,18 @@ void update_player()
     current_player.x += current_player.vx;
     current_player.y += current_player.vy;
 
-    map_draw_offsetx += (current_player.x - map_draw_offsetx - main_screen->w / 2) / (6.0);
-    map_draw_offsety -= (current_player.y + map_draw_offsety - main_screen->h / 2) / (6.0);
+    int msw, msh;
+    int mbw, mbh;
+    SDL_QueryTexture(main_screen, NULL, NULL, &msw, &msh);
+    SDL_QueryTexture(map_buffer, NULL, NULL, &mbw, &mbh);
+    map_draw_offsetx += (current_player.x - map_draw_offsetx - msw / 2) / (6.0);
+    map_draw_offsety -= (current_player.y + map_draw_offsety - msh / 2) / (6.0);
 
     //limit screen from showing outside of the map
-    if (map_draw_offsetx + main_screen->w  > map_buffer->w)
-        map_draw_offsetx = map_buffer->w - main_screen->w;
-    if(-map_draw_offsety + main_screen->h > map_buffer->h)
-        map_draw_offsety = -map_buffer->h + main_screen->h;
+    if (map_draw_offsetx + msw  > mbw)
+        map_draw_offsetx = mbw - msw;
+    if(-map_draw_offsety + msh > mbh)
+        map_draw_offsety = -mbh + msh;
     if(map_draw_offsetx < 0)
         map_draw_offsetx = 0;
     if(map_draw_offsety > 0)
@@ -658,16 +647,16 @@ int get_player_score()
     return current_player.score;
 }
 
-void handle_player_key_event(SDLKey key)
+void handle_player_key_event(SDL_Scancode key)
 {
     if (current_player.state & (1<<0)
             || current_player.state & (1<<7)) // PLAYER DEAD, or plummeting
         return;
-    int w = current_player.sprite->w;
-    int h = current_player.sprite->h;
+    int w, h;
+    SDL_QueryTexture(current_player.sprite, NULL, NULL, &w, &h);
 
     switch (key){
-        case SDLK_LEFT:
+        case SDL_SCANCODE_LEFT:
             if (current_player.x - map_draw_offsetx < 0){
                 current_player.x = map_draw_offsetx;
             }
@@ -676,13 +665,13 @@ void handle_player_key_event(SDLKey key)
                 current_player.facing_dir = 0;
             }
             break;
-        case SDLK_RIGHT:
+        case SDL_SCANCODE_RIGHT:
             if(current_player.vx < current_player.max_speed){
                 current_player.vx += 0.1;
                 current_player.facing_dir = 1;
             }
             break;
-        case SDLK_UP:
+        case SDL_SCANCODE_UP:
             if(!(current_player.state & (1<<7))){
             if(current_player.near_blocks & (1 << 0) && //SOLID BLOCK BELLOW
                         !(current_player.near_blocks & (1<<4))){ //and no block above
@@ -693,7 +682,7 @@ void handle_player_key_event(SDLKey key)
                 current_player.vy = -current_player.max_speed * 0.75;
             }
             break;
-        case SDLK_DOWN:
+        case SDL_SCANCODE_DOWN:
             if(!(current_player.near_blocks & (1 << 0))){
                 current_player.state |= (1 << 7);
                 current_player.action_timeout = 20;
@@ -701,7 +690,7 @@ void handle_player_key_event(SDLKey key)
                 current_player.vx *= 0.9;
             }
             break;
-        case SDLK_a:
+        case SDL_SCANCODE_A:
             if (current_player.facing_dir){ // FACING RIGHT
                 if (current_player.near_blocks & (1 << 2) && current_player.state & (1<<6)){
                     attempt_to_break_block(current_player.x + 3 * w/2, current_player.y + h/2);

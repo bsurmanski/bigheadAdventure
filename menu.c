@@ -7,16 +7,16 @@
 
 #include <ctype.h>
 
-#include <SDL/SDL.h>
-#include <SDL/SDL_image.h>
-#include <SDL/SDL_mixer.h>
+#include <SDL2/SDL.h>
+#include <SDL2_image/SDL_image.h>
+#include <SDL2_mixer/SDL_mixer.h>
 
 #include "font.h"
 #include "game.h"
 #include "menu.h"
 
-extern SDL_Surface *main_screen;
-extern SDL_Surface *scaled;
+extern SDL_Renderer *renderer;
+extern SDL_Texture *main_screen;
 extern int game_state;
 extern uint8_t *key_state;
 extern int RUNNING;
@@ -28,7 +28,7 @@ static int level_selection;
 const int MAX_SELECTION = 1;
 const int LEVEL_SELECT = 2;
 Mix_Chunk *mix_blip;
-SDL_Surface *selector;
+SDL_Texture *selector;
 static int num_levels;
 static char **levels;
 
@@ -36,7 +36,7 @@ static void draw_main_menu(void);
 static void update_main_menu(void);
 static void draw_level_select(void);
 static void update_level_select(void);
-void upscaleCopy(SDL_Surface* dst, SDL_Surface *src, int scale);
+void upscaleCopy(SDL_Texture *src, SDL_Texture *dst, int scale);
 
 
 void run_menu(void)
@@ -45,9 +45,9 @@ void run_menu(void)
     menu_state = RUNNING;
     selection = 0;
     mix_blip = Mix_LoadWAV("res/blip.wav");
-    selector = IMG_Load("res/pointer.png");
+    selector = IMG_LoadTexture(renderer, "res/pointer.png");
     levels = list_game_levels(&num_levels);
-    while(game_state == RUNNING && menu_state == RUNNING || menu_state == LEVEL_SELECT){
+    while((game_state == RUNNING && menu_state == RUNNING) || menu_state == LEVEL_SELECT){
         //SDL_WarpMouse(10,10);
         ms_passed = SDL_GetTicks();
         if(menu_state == RUNNING){
@@ -57,15 +57,14 @@ void run_menu(void)
             update_level_select();
             draw_level_select();
         }
-        SDL_UpdateRect(main_screen,0,0,main_screen->w, main_screen->h);
-        //SDL_BlitSurface(main_screen, 0, scaled, 0);
-        upscaleCopy(scaled, main_screen, 2);
-        SDL_Flip(scaled);
+        SDL_RenderCopy(renderer, main_screen, NULL, NULL);
+        SDL_RenderPresent(renderer);
+
         ms_passed = SDL_GetTicks() - ms_passed;
-        SDL_Delay(16 - ms_passed);
-    } 
+        if(ms_passed < 16) SDL_Delay(16 - ms_passed);
+    }
     Mix_FreeChunk(mix_blip);
-    SDL_FreeSurface(selector);
+    SDL_DestroyTexture(selector);
 }
 
 
@@ -81,27 +80,32 @@ int get_level_selection(void)
 
 static void draw_main_menu(void)
 {
-    SDL_Rect clear = {0, 0, main_screen->w, main_screen->h};
-    SDL_FillRect(main_screen, &clear, SDL_MapRGB(main_screen->format, 0, 0, 0));
-    draw_text(main_screen, "BIGHEAD'S ADVENTURE", 50, 50); 
-    draw_text(main_screen, "START", 130, 150);
-    draw_text(main_screen, "QUIT", 135, 175);
-    SDL_Rect select_src = {0, 0, selector->w, selector->h};
-    SDL_Rect select_dest = {100, 150 + 25 * selection, selector->w, selector->h}; 
-    SDL_BlitSurface(selector, &select_src, main_screen, &select_dest); 
+    SDL_SetRenderTarget(renderer, main_screen);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+    draw_text("BIGHEAD'S ADVENTURE", 50, 50);
+    draw_text("START", 130, 150);
+    draw_text("QUIT", 135, 175);
+    int w, h;
+    SDL_QueryTexture(selector, NULL, NULL, &w, &h);
+    SDL_Rect select_dest = {100, 150 + 25 * selection, w, h};
+    SDL_RenderCopy(renderer, selector, NULL, &select_dest);
+    SDL_SetRenderTarget(renderer, NULL);
 }
 
 static void draw_level_select(void)
 {
-    SDL_Rect clear = {0, 0, main_screen->w, main_screen->h};
-    SDL_FillRect(main_screen, &clear, SDL_MapRGB(main_screen->format, 0, 0, 0));
+    SDL_SetRenderTarget(renderer, main_screen);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
     char buf[20];
     memset(buf, 0, 20);
     int i;
     for(i = 0; i < strlen(levels[level_selection]) && i < 20; i++){
-        buf[i] = toupper(levels[level_selection][i]); 
+        buf[i] = toupper(levels[level_selection][i]);
     }
-    draw_text(main_screen, buf, 150 - i * 5, 120);
+    draw_text(buf, 150 - i * 5, 120);
+    SDL_SetRenderTarget(renderer, NULL);
 }
 
 static void update_main_menu(void)
@@ -113,16 +117,16 @@ static void update_main_menu(void)
                 game_state = QUIT;
                 menu_state = QUIT;
             case SDL_KEYDOWN:
-                if(event.key.keysym.sym == SDLK_DOWN){
+                if(event.key.keysym.scancode == SDL_SCANCODE_DOWN){
                     selection++;
                     selection %= (MAX_SELECTION+1);
                     Mix_PlayChannel(-1, mix_blip, 0);
-                } else if (event.key.keysym.sym == SDLK_UP){
+                } else if (event.key.keysym.scancode == SDL_SCANCODE_UP){
                     selection--;
                     Mix_PlayChannel(-1, mix_blip, 0);
                     if(selection < 0)
                         selection = MAX_SELECTION;
-                } else if (event.key.keysym.sym == SDLK_RETURN){
+                } else if (event.key.keysym.scancode == SDL_SCANCODE_RETURN){
                     if(menu_state == RUNNING){
                             if(selection == 1)
                                 game_state = QUIT;

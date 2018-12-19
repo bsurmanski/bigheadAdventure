@@ -8,9 +8,9 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <time.h>
-#include <SDL/SDL.h>
-#include <SDL/SDL_image.h>
-#include <SDL/SDL_mixer.h>
+#include <SDL2/SDL.h>
+#include <SDL2_image/SDL_image.h>
+#include <SDL2_mixer/SDL_mixer.h>
 
 #include "font.h"
 #include "menu.h"
@@ -23,10 +23,10 @@ const int QUIT = -1;
 const int SCREENX = 320;
 const int SCREENY = 240;
 
-SDL_Surface *main_screen;
-SDL_Surface *scaled;
+SDL_Renderer *renderer;
+SDL_Texture *main_screen;
 int game_state;
-uint8_t *key_state;
+const uint8_t *key_state;
 
 
 int main(int argc, char *argv[])
@@ -37,19 +37,24 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Unable to init SDL: %s\n", SDL_GetError());
     }
 
+    SDL_Window *window = SDL_CreateWindow("Bighead's Adventure",
+                                          SDL_WINDOWPOS_UNDEFINED,
+                                          SDL_WINDOWPOS_UNDEFINED,
+                                          SCREENX * 2,
+                                          SCREENY * 2, 0);
 
-    scaled = SDL_SetVideoMode(SCREENX * 2, SCREENY * 2, 32, SDL_DOUBLEBUF | SDL_SWSURFACE);
+    renderer = SDL_CreateRenderer(window, -1, 0);
 
-    main_screen = SDL_CreateRGBSurface(SDL_SWSURFACE,
-            SCREENX,
-            SCREENY,
-            scaled->format->BitsPerPixel,
-            scaled->format->Rmask,
-            scaled->format->Gmask,
-            scaled->format->Bmask,
-            scaled->format->Amask
-            );
+    SDL_RendererInfo info;
+    SDL_GetRendererInfo(renderer, &info);
+    if(!(info.flags & SDL_RENDERER_TARGETTEXTURE)) {
+        printf("Cannot set a texture as a render target!\n");
+    }
 
+    main_screen = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+                                    SDL_TEXTUREACCESS_TARGET,
+                                    SCREENX,
+                                    SCREENY);
 
     if (!main_screen){
         fprintf(stderr, "SDL failed screen init: %s\n", SDL_GetError());
@@ -60,7 +65,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "SDL audio failed: %s\n", SDL_GetError());
     }
     init_font();
-    key_state = SDL_GetKeyState(NULL);
+    key_state = SDL_GetKeyboardState(0);
     game_state = 1;
     srand(time(NULL));
     load_game_resources();
