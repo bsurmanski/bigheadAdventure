@@ -9,15 +9,14 @@
 #include <SDL2_image/SDL_image.h>
 
 #include "font.h"
+#include "game.h"
 
 extern SDL_Renderer *renderer;
 static SDL_Texture *font;
 
 void init_font(){
-    font = IMG_LoadTexture(renderer, "res/font.png");
+    font = get_texture("font.png");
 }
-
-extern int outside_buffer(SDL_Surface *s, int x, int y);
 
 void draw_text(const char *str, int x, int y){
     int font_w, font_h;

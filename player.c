@@ -19,6 +19,7 @@
 
 extern SDL_Texture *main_screen; // FROM MAIN.C
 extern SDL_Texture *map_buffer; // FROM GAME.C
+extern const char *res_pack;
 
 
 /*
@@ -64,6 +65,7 @@ typedef struct Particle{
 } Particle;
 bool particle_update_chunky(Particle *p);
 bool particle_update_normal(Particle *p);
+bool particle_update_snow(Particle *p);
 void particle_draw_chunky(Particle *p, int offsetx, int offsety);
 void particle_draw_normal(Particle *p, int offsetx, int offsety);
 
@@ -118,20 +120,20 @@ void load_player_resources()
     //bit map of near block transparency eg. lsb = block bellow, lsb+1 = block right ...
     current_player.near_blocks = 0;
 
-    frame0 = IMG_LoadTexture(renderer, "res/bighead.png");
-    frame1 = IMG_LoadTexture(renderer, "res/bigheadl.png");
+    frame0 = get_texture("bighead.png");
+    frame1 = get_texture("bigheadl.png");
     frame2 = get_horizontal_flipped(frame1);
-    raml = IMG_LoadTexture(renderer, "res/bighead-raml.png");
+    raml = get_texture("bighead-raml.png");
     ramr = get_horizontal_flipped(raml);
-    dead = IMG_LoadTexture(renderer, "res/bighead-dead.png");
-    run1l = IMG_LoadTexture(renderer, "res/bighead-run1l.png");
-    run2l = IMG_LoadTexture(renderer, "res/bighead-run2l.png");
+    dead = get_texture("bighead-dead.png");
+    run1l = get_texture("bighead-run1l.png");
+    run2l = get_texture("bighead-run2l.png");
     run1r = get_horizontal_flipped(run1l);
     run2r = get_horizontal_flipped(run2l);
-    plummet = IMG_LoadTexture(renderer, "res/bighead-plummet.png");
-    jumpl = IMG_LoadTexture(renderer, "res/bighead-jump.png");
+    plummet = get_texture("bighead-plummet.png");
+    jumpl = get_texture("bighead-jump.png");
     jumpr = get_horizontal_flipped(jumpl);
-    falll = IMG_LoadTexture(renderer, "res/bighead-fall.png");
+    falll = get_texture("bighead-fall.png");
     fallr = get_horizontal_flipped(falll);
 
     current_player.sprite = frame0;
@@ -403,6 +405,18 @@ bool particle_update_chunky(Particle *p)
     return false;
 }
 
+bool particle_update_snow(Particle *p)
+{
+    int nextx = (int)(p->x + p->vx);
+    int nexty = (int)(p->y + p->vy);
+    if(outside_buffer(map_buffer, nextx, nexty)){
+        return true;
+    }
+    p->x += p->vx;
+    p->y += p->vy;
+    return false;
+}
+
 /**
  * Will update the array of near blocks. If the currently touching block is
  * collectible, it will be collected. if it is deadly, it will kill the player
@@ -640,6 +654,19 @@ void update_player()
         map_draw_offsetx = 0;
     if(map_draw_offsety > 0)
         map_draw_offsety = 0;
+
+    // Create snow if using the xmas res pack
+    if(rand() % 5 == 0 && !strcmp("xmas", res_pack)) {
+        Particle p;
+        p.x = map_draw_offsetx + rand() % msw;
+        p.y = -map_draw_offsety + 1;
+        p.vx = ((rand() % 100) / 100.0) - 0.5;
+        p.vy = ((rand() % 100) / 100.0);
+        p.draw = particle_draw_chunky;
+        p.update = particle_update_snow;
+        p.color = (SDL_Color){255, 255, 255, 255};
+        list_append(particles, &p);
+    }
 }
 
 int get_player_score()

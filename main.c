@@ -27,7 +27,15 @@ SDL_Renderer *renderer;
 SDL_Texture *main_screen;
 int game_state;
 const uint8_t *key_state;
+const char *res_pack = 0;
 
+int current_month() {
+    time_t timer;
+    struct tm* tm_info;
+    time(&timer);
+    tm_info = localtime(&timer);
+    return tm_info->tm_mon;
+}
 
 int main(int argc, char *argv[])
 {
@@ -35,6 +43,11 @@ int main(int argc, char *argv[])
     err = SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO);
     if(err){
         fprintf(stderr, "Unable to init SDL: %s\n", SDL_GetError());
+    }
+
+    // december
+    if (current_month() == 11) {
+        res_pack = "xmas";
     }
 
     SDL_Window *window = SDL_CreateWindow("Bighead's Adventure",

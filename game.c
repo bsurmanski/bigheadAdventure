@@ -11,6 +11,7 @@
 
 #include <sys/types.h>
 #include <dirent.h>
+#include <unistd.h>
 
 #include <SDL2/SDL.h>
 #include <SDL2_image/SDL_image.h>
@@ -30,6 +31,7 @@ extern SDL_Renderer *renderer;
 extern SDL_Texture *main_screen;
 extern int game_state;
 extern uint8_t *key_state;
+extern const char *res_pack;
 
 int ticks;
 bool win = false;
@@ -57,26 +59,6 @@ void upscaleCopy(SDL_Texture *src, SDL_Texture *dst, int scale)
     SDL_SetRenderTarget(renderer, dst);
     SDL_RenderCopy(renderer, src, NULL, NULL);
     SDL_SetRenderTarget(renderer, NULL);
-
-    /*
-    flicker = 1;
-    int i, j, k;
-    for(j = 0; j < src->h; j++){
-        for(i = 0; i < src->w; i++){
-            for(k = 0; k < scale; k++){
-                memcpy(dest->pixels + flicker * k * dest->format->BytesPerPixel + scale * ((i * dest->format->BytesPerPixel) + j * dest->pitch),
-                        src->pixels + (i * src->format->BytesPerPixel + j * src->pitch),
-                      src->format->BytesPerPixel);
-            }
-        }
-        for(k = 1; k < scale; k++){
-        memcpy(dest->pixels + scale * (j * dest->pitch),
-                dest->pixels + scale * ((j+k) * dest->pitch),
-                dest->pitch
-                );
-        }
-    }
-    */
 }
 
 
@@ -229,15 +211,31 @@ static void load_game_level(char *level){
  */
 void load_game_resources()
 {
-    blk_brick = IMG_LoadTexture(renderer, "res/brick.png");
-    blk_grass = IMG_LoadTexture(renderer, "res/grass.png");
-    blk_coin = IMG_LoadTexture(renderer, "res/coin.png");
-    blk_spike = IMG_LoadTexture(renderer, "res/spikes.png");
-    blk_water = IMG_LoadTexture(renderer, "res/water.png");
-    blk_obsid = IMG_LoadTexture(renderer, "res/obsidian.png");
-    blk_cake = IMG_LoadTexture(renderer, "res/cake.png");
+    blk_brick = get_texture("brick.png");
+    blk_grass = get_texture("grass.png");
+    blk_coin = get_texture("coin.png");
+    blk_spike = get_texture("spikes.png");
+    blk_water = get_texture("water.png");
+    blk_obsid = get_texture("obsidian.png");
+    blk_cake = get_texture("cake.png");
 
     load_player_resources();
+}
+
+SDL_Texture *get_texture(const char *filename) {
+    char buf[128];
+    if(res_pack) {
+        snprintf(buf, 127, "res/%s/%s", res_pack, filename);
+    }
+
+    // file does not exist
+    if(access(buf, F_OK) == -1) {
+        snprintf(buf, 127, "res/%s", filename);
+    }
+
+    printf("BUF: %s\n", buf);
+
+    return IMG_LoadTexture(renderer, buf);
 }
 
 SDL_Texture *get_horizontal_flipped(SDL_Texture *src)

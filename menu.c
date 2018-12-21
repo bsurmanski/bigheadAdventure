@@ -45,7 +45,7 @@ void run_menu(void)
     menu_state = RUNNING;
     selection = 0;
     mix_blip = Mix_LoadWAV("res/blip.wav");
-    selector = IMG_LoadTexture(renderer, "res/pointer.png");
+    selector = get_texture("pointer.png");
     levels = list_game_levels(&num_levels);
     while((game_state == RUNNING && menu_state == RUNNING) || menu_state == LEVEL_SELECT){
         //SDL_WarpMouse(10,10);
