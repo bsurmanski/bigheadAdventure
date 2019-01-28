@@ -8,8 +8,16 @@
 #include <ctype.h>
 
 #include <SDL2/SDL.h>
+#ifdef __APPLE__
 #include <SDL2_image/SDL_image.h>
 #include <SDL2_mixer/SDL_mixer.h>
+#elif __EMSCRIPTEN__
+#include <SDL2/SDL_image.h>
+#include <SDL2/SDL_mixer.h>
+#else
+#include <SDL2/SDL_image.h>
+#include <SDL2/SDL_mixer.h>
+#endif
 
 #include "font.h"
 #include "game.h"
@@ -27,8 +35,8 @@ static int selection;
 static int level_selection;
 const int MAX_SELECTION = 1;
 const int LEVEL_SELECT = 2;
-Mix_Chunk *mix_blip;
-SDL_Texture *selector;
+Mix_Chunk *mix_blip = NULL;
+SDL_Texture *selector = NULL;
 static int num_levels;
 static char **levels;
 
@@ -38,33 +46,26 @@ static void draw_level_select(void);
 static void update_level_select(void);
 void upscaleCopy(SDL_Texture *src, SDL_Texture *dst, int scale);
 
-
-void run_menu(void)
-{
-    static int ms_passed;
+void init_menu(void) {
     menu_state = RUNNING;
     selection = 0;
-    mix_blip = Mix_LoadWAV("res/blip.wav");
-    selector = get_texture("pointer.png");
+    if(!mix_blip) mix_blip = get_sound("blip.wav");
+    if(!selector) selector = get_texture("pointer.png");
     levels = list_game_levels(&num_levels);
-    while((game_state == RUNNING && menu_state == RUNNING) || menu_state == LEVEL_SELECT){
-        //SDL_WarpMouse(10,10);
-        ms_passed = SDL_GetTicks();
-        if(menu_state == RUNNING){
-            update_main_menu();
-            draw_main_menu();
-        } else {
-            update_level_select();
-            draw_level_select();
-        }
-        SDL_RenderCopy(renderer, main_screen, NULL, NULL);
-        SDL_RenderPresent(renderer);
+}
 
-        ms_passed = SDL_GetTicks() - ms_passed;
-        if(ms_passed < 16) SDL_Delay(16 - ms_passed);
+int tick_menu(void)
+{
+    if(menu_state == RUNNING){
+        update_main_menu();
+        draw_main_menu();
+    } else {
+        update_level_select();
+        draw_level_select();
     }
-    Mix_FreeChunk(mix_blip);
-    SDL_DestroyTexture(selector);
+    SDL_RenderCopy(renderer, main_screen, NULL, NULL);
+    SDL_RenderPresent(renderer);
+    return menu_state == QUIT;
 }
 
 
@@ -120,10 +121,10 @@ static void update_main_menu(void)
                 if(event.key.keysym.scancode == SDL_SCANCODE_DOWN){
                     selection++;
                     selection %= (MAX_SELECTION+1);
-                    Mix_PlayChannel(-1, mix_blip, 0);
+                    play_sound(mix_blip);
                 } else if (event.key.keysym.scancode == SDL_SCANCODE_UP){
                     selection--;
-                    Mix_PlayChannel(-1, mix_blip, 0);
+                    play_sound(mix_blip);
                     if(selection < 0)
                         selection = MAX_SELECTION;
                 } else if (event.key.keysym.scancode == SDL_SCANCODE_RETURN){
@@ -157,10 +158,10 @@ static void update_level_select(void)
                 if(event.key.keysym.sym == SDLK_DOWN){
                     level_selection++;
                     level_selection %= (num_levels);
-                    Mix_PlayChannel(-1, mix_blip, 0);
+                    play_sound(mix_blip);
                 } else if (event.key.keysym.sym == SDLK_UP){
                     level_selection--;
-                    Mix_PlayChannel(-1, mix_blip, 0);
+                    play_sound(mix_blip);
                     if(level_selection < 0)
                         level_selection = num_levels - 1;
                 } else if (event.key.keysym.sym == SDLK_RETURN){

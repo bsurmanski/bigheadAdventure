@@ -14,7 +14,16 @@
 #include <unistd.h>
 
 #include <SDL2/SDL.h>
+#ifdef __APPLE__
 #include <SDL2_image/SDL_image.h>
+#include <SDL2_mixer/SDL_mixer.h>
+#elif __EMSCRIPTEN__
+#include <SDL2/SDL_image.h>
+#include <SDL2/SDL_mixer.h>
+#else
+#include <SDL2/SDL_image.h>
+#include <SDL2/SDL_mixer.h>
+#endif
 
 #include "list.h"
 #include "game.h"
@@ -157,7 +166,10 @@ static char **levels = 0;
     levels = malloc(sizeof(char*) * max_level_size);
     DIR *dp;
     struct dirent *ep;
-    dp = opendir("res/maps/");
+
+    char buf[64];
+    snprintf(buf, 64, "%s/maps/", get_resource_dir());
+    dp = opendir(buf);
     while((ep = readdir(dp))){
         if(!(strchr(ep->d_name, '.') - ep->d_name)) //name starts with '.'
             continue;
@@ -183,18 +195,29 @@ static char **levels = 0;
     return levels;
 }
 
+char *get_resource_dir() {
+#ifdef __APPLE__
+    return "../Resources";
+#else
+    return "res";
+#endif
+}
+
 /**
  * will load the game level and set the player position
  */
 static void load_game_level(char *level){
     char buf[64];
-    strcpy(buf, "res/maps/");
+    strcpy(buf, get_resource_dir());
+    strcat(buf, "/maps/");
     strcat(buf, level);
     strcat(buf, ".png");
 
     if(map){
         SDL_FreeSurface(map);
     }
+
+    printf("%s\n", buf);
     map = IMG_Load(buf);
 
     init_map_buffer();
@@ -225,17 +248,45 @@ void load_game_resources()
 SDL_Texture *get_texture(const char *filename) {
     char buf[128];
     if(res_pack) {
-        snprintf(buf, 127, "res/%s/%s", res_pack, filename);
+        snprintf(buf, 127, "%s/%s/%s", get_resource_dir(), res_pack, filename);
     }
 
     // file does not exist
-    if(access(buf, F_OK) == -1) {
-        snprintf(buf, 127, "res/%s", filename);
+    if(!res_pack || access(buf, F_OK) == -1) {
+        snprintf(buf, 127, "%s/%s", get_resource_dir(), filename);
     }
 
-    printf("BUF: %s\n", buf);
+    printf("%s\n", buf);
 
     return IMG_LoadTexture(renderer, buf);
+}
+
+Mix_Chunk *get_sound(const char *filename) {
+#ifndef NO_AUDIO
+    char buf[128];
+
+    if(res_pack) {
+        snprintf(buf, 127, "%s/%s/%s", get_resource_dir(), res_pack, filename);
+    }
+
+    // file does not exist
+    if(!res_pack || access(buf, F_OK) == -1) {
+        snprintf(buf, 127, "%s/%s", get_resource_dir(), filename);
+    }
+
+    printf("%s\n", buf);
+
+    return Mix_LoadWAV(buf);
+#else
+    return NULL;
+#endif
+}
+
+void play_sound(Mix_Chunk *sound) {
+#ifndef NO_AUDIO
+    printf("SOUND\n");
+    Mix_PlayChannel(-1, sound, 0);
+#endif
 }
 
 SDL_Texture *get_horizontal_flipped(SDL_Texture *src)
@@ -368,6 +419,7 @@ void find_map_block(int pxl, int *x, int *y)
                 return;
             }
         }
+    printf("BLOCK %#010x not found!\n", pxl);
 }
 
 static void update_game()
@@ -419,22 +471,21 @@ static void update_game()
     update_player();
 }
 
-static int ms_passed;
-void run_game()
-{
+void init_game() {
     ticks = 0;
     win = 0;
     int len;
     char **levels = list_game_levels(&len);
     load_game_level(levels[get_level_selection()]);
-    while(game_state == RUNNING && !win){
-        ms_passed = SDL_GetTicks();
-        update_game();
-        draw_game();
+}
 
-        SDL_SetRenderTarget(renderer, NULL);
-        SDL_RenderPresent(renderer);
-        ms_passed = SDL_GetTicks() - ms_passed;
-        if(ms_passed < 16) SDL_Delay(16 - ms_passed);
-    }
+static int ms_passed;
+int tick_game()
+{
+    update_game();
+    draw_game();
+
+    SDL_SetRenderTarget(renderer, NULL);
+    SDL_RenderPresent(renderer);
+    return win;
 }

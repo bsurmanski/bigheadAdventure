@@ -9,8 +9,16 @@
 #include <stdbool.h>
 
 #include <SDL2/SDL.h>
+
+#ifdef __APPLE__
 #include <SDL2_image/SDL_image.h>
 #include <SDL2_mixer/SDL_mixer.h>
+#elif __EMSCRIPTEN__
+#include <SDL2/SDL_image.h>
+#else
+#include <SDL2/SDL_image.h>
+#include <SDL2/SDL_mixer.h>
+#endif
 
 #include "player.h"
 #include "map.h"
@@ -140,14 +148,14 @@ void load_player_resources()
 
     particles = list_create(sizeof(Particle));
 
-    mix_jump = Mix_LoadWAV("res/jump.wav");
-    mix_step1 = Mix_LoadWAV("res/step1.wav");
-    mix_step2 = Mix_LoadWAV("res/step2.wav");
-    mix_blkboom = Mix_LoadWAV("res/block-break.wav");
-    mix_coin = Mix_LoadWAV("res/coin.wav");
-    mix_splash = Mix_LoadWAV("res/splash.wav");
-    mix_spikes = Mix_LoadWAV("res/spikes.wav");
-    mix_ouch = Mix_LoadWAV("res/ouch.wav");
+    mix_jump = get_sound("jump.wav");
+    mix_step1 = get_sound("step1.wav");
+    mix_step2 = get_sound("step2.wav");
+    mix_blkboom = get_sound("block-break.wav");
+    mix_coin = get_sound("coin.wav");
+    mix_splash = get_sound("splash.wav");
+    mix_spikes = get_sound("spikes.wav");
+    mix_ouch = get_sound("ouch.wav");
 
 }
 
@@ -318,7 +326,7 @@ static uint8_t attempt_to_break_block(int x, int y)
     int ret = 0;
     if (block_is_breakable(get_map_block(x,y))){
         remove_map_block(x, y);
-        Mix_PlayChannel(-1, mix_blkboom, 0);
+        play_sound(mix_blkboom);
         ret = 1;
 
         int i;
@@ -462,7 +470,7 @@ static void update_near_blocks()
 
     if (blk == BLK_WATR){
         if (!(current_player.state & (1 << 1))){ // in water and not wet
-            Mix_PlayChannel(-1, mix_splash, 0);
+            play_sound(mix_splash);
             int x = current_player.x + w / 2;
             int y = current_player.y + h;
             int i;
@@ -487,7 +495,7 @@ static void update_near_blocks()
     if (!(current_player.state & (1 << 0))){ // PLAYER NOT DEAD
         if(block_is_collectible(blk)){ //remove collectible block
             remove_map_block(nextx + w/2, nexty + w/2);
-            Mix_PlayChannel(-1, mix_coin, 0);
+            play_sound(mix_coin);
             if (current_player.state & (1<<7)){
                 current_player.score+= 500;
             } else{
@@ -497,8 +505,8 @@ static void update_near_blocks()
         if(block_is_deadly(blk)){
             //KILL PLAYER
              current_player.state = (1 << 0); //set player dead
-             Mix_PlayChannel(-1, mix_ouch, 0);
-             Mix_PlayChannel(-1, mix_spikes, 0);
+             play_sound(mix_ouch);
+             play_sound(mix_spikes);
 
             int x = current_player.x + w / 2;
             int y = current_player.y + h;
@@ -538,18 +546,18 @@ static void update_sprites(){
                 if (current_player.state & (1<<6) && current_player.vx < 0){ //running left
                     if (current_player.sprite == run1l){
                         current_player.sprite = run2l;
-                        Mix_PlayChannel(-1, mix_step2, 0);
+                        play_sound(mix_step2);
                     } else {
                         current_player.sprite = run1l;
-                        Mix_PlayChannel(-1, mix_step1, 0);
+                        play_sound(mix_step1);
                     }
                 } else if (current_player.state & (1<<6) && current_player.vx > 0){ //running right
                     if (current_player.sprite == run1r){
                         current_player.sprite = run2r;
-                        Mix_PlayChannel(-1, mix_step2, 0);
+                        play_sound(mix_step2);
                     } else {
                         current_player.sprite = run1r;
-                        Mix_PlayChannel(-1, mix_step1, 0);
+                        play_sound(mix_step1);
                     }
                 } else {
                     if (current_player.sprite == frame1){
@@ -656,7 +664,7 @@ void update_player()
         map_draw_offsety = 0;
 
     // Create snow if using the xmas res pack
-    if(rand() % 5 == 0 && !strcmp("xmas", res_pack)) {
+    if(rand() % 5 == 0 && res_pack && !strcmp("xmas", res_pack)) {
         Particle p;
         p.x = map_draw_offsetx + rand() % msw;
         p.y = -map_draw_offsety + 1;
@@ -703,7 +711,7 @@ void handle_player_key_event(SDL_Scancode key)
             if(current_player.near_blocks & (1 << 0) && //SOLID BLOCK BELLOW
                         !(current_player.near_blocks & (1<<4))){ //and no block above
                 current_player.vy = -current_player.max_speed * 1;
-                Mix_PlayChannel(-1, mix_jump, 0);
+                play_sound(mix_jump);
             }
             if(current_player.state & (1<<1))
                 current_player.vy = -current_player.max_speed * 0.75;

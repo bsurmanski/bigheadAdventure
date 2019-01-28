@@ -8,7 +8,8 @@
 #ifndef _MENU_H
 #define _MENU_H
 
-void run_menu(void);
+void init_menu(void);
+int tick_menu(void);
 int get_menu_selection(void);
 int get_level_selection(void);
 
