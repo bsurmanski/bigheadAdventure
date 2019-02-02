@@ -7,6 +7,8 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <SDL/SDL.h>
 #include <SDL/SDL_image.h>
@@ -189,8 +191,8 @@ void particle_draw_normal(Particle *p)
 {
     if(!outside_buffer(main_screen, (p->x - map_draw_offsetx),
                 p->y + map_draw_offsety)){
-            memcpy(main_screen->pixels + ((int)p->x - map_draw_offsetx) 
-                    * main_screen->format->BytesPerPixel 
+            memcpy(main_screen->pixels + ((int)p->x - map_draw_offsetx)
+                    * main_screen->format->BytesPerPixel
                     + ((int) p->y + map_draw_offsety) * main_screen->pitch,
                             &(p->color),
                              main_screen->format->BytesPerPixel);
@@ -199,7 +201,7 @@ void particle_draw_normal(Particle *p)
 
 void particle_draw_chunky(Particle *p){
     if (!outside_buffer(main_screen, (p->x - map_draw_offsetx),
-                (p->y + map_draw_offsety)) && 
+                (p->y + map_draw_offsety)) &&
             (!outside_buffer(main_screen, (p->x - map_draw_offsetx + 1),
             (p->y + map_draw_offsety + 1)))){
         memcpy(main_screen->pixels + ((int)p->x - map_draw_offsetx) *
@@ -236,7 +238,9 @@ void draw_player()
                     current_player.sprite->h};
 
     SDL_BlitSurface(current_player.sprite, NULL, main_screen, &dest);
+    if (SDL_MUSTLOCK(main_screen)) SDL_LockSurface(main_screen);
     draw_particles();
+    if (SDL_MUSTLOCK(main_screen)) SDL_UnlockSurface(main_screen);
 }
 
 
@@ -355,6 +359,7 @@ static void update_particles()
 {
     Particle *p;
     Node *current_node = list_first_node(particles);
+    if (SDL_MUSTLOCK(map_buffer)) SDL_LockSurface(map_buffer);
     while(current_node){
         p = node_value(current_node);
         if(p->update(p)){
@@ -365,6 +370,7 @@ static void update_particles()
             current_node = node_next(current_node);
         }
     }
+    if (SDL_MUSTLOCK(map_buffer)) SDL_UnlockSurface(map_buffer);
 }
 
 int blk;
@@ -388,7 +394,7 @@ bool particle_update_normal(Particle *p)
     } else {
         p->vy += 0.1;
         if(outside_buffer(map_buffer, p->x, p->y)){
-          return true; 
+          return true;
         }
     }
     return false;
@@ -491,7 +497,7 @@ static void update_near_blocks()
             Mix_PlayChannel(-1, mix_coin, 0);
             if (current_player.state & (1<<7)){
                 current_player.score+= 500;
-            } else{ 
+            } else{
                 current_player.score+= 100;
             }
         }
@@ -527,9 +533,9 @@ static void update_sprites(){
         if (current_player.state & (1 << 7)){ //PLUMMETING
             current_player.sprite = plummet;
           } else if (current_player.vy < 0){ // JUMPING
-           current_player.sprite = current_player.facing_dir ? 
-                    jumpr : 
-                    jumpl; 
+           current_player.sprite = current_player.facing_dir ?
+                    jumpr :
+                    jumpl;
         /*} else if (current_player.vy > 0) { //FALLING
             current_player.sprite = current_player.facing_dir?
                     fallr :
@@ -577,7 +583,7 @@ void update_player()
     update_particles();
     update_sprites();
 
-    if (current_player.vx >= current_player.max_speed || 
+    if (current_player.vx >= current_player.max_speed ||
                         current_player.vx <= -current_player.max_speed){
         current_player.state |= (1<<6);
     } else {
@@ -593,7 +599,7 @@ void update_player()
                 int y = current_player.y + 3*h/2;
                 attempt_to_break_block(x,y);
             }
-            current_player.action_timeout--; 
+            current_player.action_timeout--;
             current_player.vx *=0.8;
             if (!current_player.action_timeout){
                 current_player.state &= ~(1<<7); //stop plummeting

@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <stdbool.h>
 
 #include <sys/types.h>
@@ -17,13 +18,10 @@
 
 #include "list.h"
 #include "game.h"
+#include "menu.h"
 #include "font.h"
 #include "map.h"
 #include "player.h"
-
-extern const int RUNNING;
-extern const int QUIT;
-
 
 extern SDL_Surface *main_screen;
 extern SDL_Surface *scaled;
@@ -54,6 +52,7 @@ int map_draw_offsety = 0;
 
 void upscaleCopy(SDL_Surface *dest, SDL_Surface *src, int scale)
 {
+    if (SDL_MUSTLOCK(dest)) SDL_LockSurface(dest);
     flicker = 1;
     int i, j, k;
     for(j = 0; j < src->h; j++){
@@ -71,6 +70,7 @@ void upscaleCopy(SDL_Surface *dest, SDL_Surface *src, int scale)
                 );
         }*/
     }
+    if (SDL_MUSTLOCK(dest)) SDL_UnlockSurface(dest);
 }
 
 
@@ -93,6 +93,17 @@ static void init_map_buffer()
                 main_screen->format->Bmask,
                 main_screen->format->Amask);
 
+    SDL_Surface *brick_buffer =
+        SDL_CreateRGBSurface(SDL_SWSURFACE,
+                16,
+                16,
+                main_screen->format->BitsPerPixel,
+                main_screen->format->Rmask,
+                main_screen->format->Gmask,
+                main_screen->format->Bmask,
+                main_screen->format->Amask);
+    SDL_BlitSurface(blk_brick, NULL, brick_buffer, NULL);
+
     SDL_Rect map_size = {0,0, map_buffer->w, map_buffer->h};
     SDL_FillRect(map_buffer,
                 &map_size,
@@ -101,7 +112,9 @@ static void init_map_buffer()
 
     int pxl;
     int bpp = map->format->BytesPerPixel;
-    int i, j;
+    int buf_bpp = map->format->BytesPerPixel;
+    int i, j, k;
+    if (SDL_MUSTLOCK(map)) SDL_LockSurface(map);
     for(i = 0; i < map->h; i++){
         for(j = 0; j < map->w; j++){
             dest.x = j * 16;
@@ -134,6 +147,7 @@ static void init_map_buffer()
             }
         }
     }
+    if (SDL_MUSTLOCK(map)) SDL_UnlockSurface(map);
 }
 
 char **list_game_levels(int *num_levels)
@@ -188,7 +202,9 @@ static void load_game_level(char *level){
     }
     map = IMG_Load(buf);
 
+    printf("init buffer %d\n", SDL_GetTicks());
     init_map_buffer();
+    printf("buffer done %d\n", SDL_GetTicks());
 
     if (overlay){
         SDL_FreeSurface(overlay);
@@ -244,6 +260,7 @@ SDL_Surface *get_horizontal_flipped(SDL_Surface *surface)
 
     int bpp = surface->format->BytesPerPixel;
     int i, j;
+    if (SDL_MUSTLOCK(flipped)) SDL_LockSurface(flipped);
     for(i = 0; i < surface->h; i++){
         for(j = 0; j < surface->w; j++){
             memcpy(flipped->pixels + ((i * bpp) + (j * surface->pitch)),
@@ -251,6 +268,7 @@ SDL_Surface *get_horizontal_flipped(SDL_Surface *surface)
                     bpp);
         }
     }
+    if (SDL_MUSTLOCK(flipped)) SDL_UnlockSurface(flipped);
     return flipped;
 }
 
@@ -278,7 +296,7 @@ static void draw_player_data()
 /**
  * draws the game to the screen, and calls all other relevant draw functions
  */
-static void draw_game()
+void draw_game()
 {
     //clear screen
     SDL_FillRect(scaled, 0, 0);
@@ -346,7 +364,7 @@ void find_map_block(int pxl, int *x, int *y)
         }
 }
 
-static void update_game()
+enum GameState update_game()
 {
     static int time = 0;
     if(SDL_GetTicks() - time > 16){
@@ -394,17 +412,31 @@ static void update_game()
     }
 
     update_player();
+
+    if (win) {
+        return LEVEL_SELECT;
+    }
+    return game_state;
+}
+
+void game_init() {
+    int len;
+    printf("getting levels: %d\n", SDL_GetTicks());
+    char **levels = list_game_levels(&len);
+    printf("loading level: %d\n", SDL_GetTicks());
+    load_game_level(levels[get_level_selection()]);
+    printf("loaded: %d\n", SDL_GetTicks());
+    ticks = 0;
+    win = 0;
+}
+
+void game_deinit() {
 }
 
 static int ms_passed;
 void run_game()
 {
-    ticks = 0;
-    win = 0;
-    int len;
-    char **levels = list_game_levels(&len);
-    load_game_level(levels[get_level_selection()]);
-    while(game_state == RUNNING && !win){
+    while(game_state == GAME && !win){
         ms_passed = SDL_GetTicks();
         update_game();
         draw_game();
