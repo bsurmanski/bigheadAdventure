@@ -58,7 +58,14 @@ void upscaleCopy(SDL_Surface *dest, SDL_Surface *src, int scale)
     for(j = 0; j < src->h; j++){
         for(i = 0; i < src->w; i++){
             for(k = 0; k < scale; k++){
-                memcpy(dest->pixels + flicker * k * dest->format->BytesPerPixel + scale * ((i * dest->format->BytesPerPixel) + j * dest->pitch),
+                memcpy(dest->pixels
+                        + scale * ((i * dest->format->BytesPerPixel) + j * dest->pitch)
+                        + k * dest->pitch,
+                        src->pixels + (i * src->format->BytesPerPixel + j * src->pitch),
+                      src->format->BytesPerPixel);
+                memcpy(dest->pixels + 1 * dest->format->BytesPerPixel
+                        + scale * ((i * dest->format->BytesPerPixel) + j * dest->pitch)
+                        + k * dest->pitch,
                         src->pixels + (i * src->format->BytesPerPixel + j * src->pitch),
                       src->format->BytesPerPixel);
             }
